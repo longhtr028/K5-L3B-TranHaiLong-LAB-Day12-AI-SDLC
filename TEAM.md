@@ -1,21 +1,16 @@
 # TEAM
 
-**Tên nhóm:** …  **Số người:** …  (khớp `team_size` trong `game.contract.json`)
+**Tên nhóm:** hai-long  
+**Số người:** 1  
+**MSSV:** 2A202603891
 
-| Thành viên | GitHub handle | Module chính | Vai quy trình | Người dự phòng cho |
+| Thành viên | GitHub handle | Module chính | Vai quy trình | Người dự phòng |
 |---|---|---|---|---|
-| | | `sim/gather` | | |
-| | | `sim/quan` | | |
-| | | `client/ui` | | |
-| | | `qa` | | |
+| Trần Hải Long | longhtr028 | Gather, Quán, UI, QA | PO, Integrator, QA, Release | — |
 
-**Vai quy trình:** PO (đầu mối hỏi giảng viên, giữ `docs/clarify.md`) · Integrator (giữ `docs/contracts/`, gắn tag) · QA lead · Scrum/Release. Có thể kiêm.
+## Thỏa thuận làm việc
 
-## Thỏa thuận làm việc nhóm (điền trong 15 phút kickoff, ≤ 10 dòng)
-
-- Kênh liên lạc: …
-- Khi bất đồng về thiết kế: … (ví dụ: nói 2 phút, không xong thì Integrator quyết và ghi lại lý do)
-- Khi ai đó trễ hoặc vướng quá 10 phút: … (ví dụ: nói ngay trong kênh, người dự phòng nhận việc)
-- Giờ standup giữa phase: …
-- Cách đọc code của nhau (tùy chọn): … (ví dụ: mỗi người đọc lát kế bên; PR hoặc xem trực tiếp)
-- Cách làm việc với Git: … (ví dụ: push thẳng nhánh chính / nhánh ngắn rồi gộp; thống nhất ai gắn tag)
+- Ghi phạm vi và câu hỏi trong `docs/plan/` và `docs/clarify.md`.
+- Làm theo lát nhỏ, chạy test headless và đọc diff trước khi đưa lên `main`.
+- Ghi lại lệnh, kết quả thực chạy và giới hạn trong `docs/verification/`.
+- Gắn tag sau khi kiểm tra được commit tương ứng.
