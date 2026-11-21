@@ -118,7 +118,7 @@ class GatherSim:
         if self.oxygen_ticks > 0:
             self.oxygen_ticks -= 1
             if self.oxygen_ticks == 0:
-                events.append(("oxygen_empty", {}))
+                events.append(("oxygen_empty", {"oxygen_ticks": 0}))
         if self.oxygen_ticks > 0:
             return
         self.zero_oxy_ticks += 1
@@ -128,18 +128,23 @@ class GatherSim:
         self.hp -= 1
         events.append(("choke", {"hp": self.hp}))
         if self.hp == 0:
-            self.hold.clear()
-            events.append(("faint", {}))
-            self._finish("fainted", events)
+            self._faint("choke", events)
+
+    def _faint(self, cause, events):
+        lost = list(reversed(self.hold))
+        self.hold.clear()
+        events.append(("faint", {"cause": cause, "lost": lost, "hp": 0}))
+        self._finish("fainted", events)
 
     def _closest(self, entities, radius):
         distances = [(math.dist(self.pos, e["pos"]), id_key(e["id"]), e) for e in entities]
         distance, _, target = min(distances, default=(math.inf, (), None))
         return target if distance <= radius else None
 
-    def _collect(self, kind, quantity, target, events):
+    def _collect(self, kind, quantity, action, target, events):
         if len(self.hold) + quantity > self.t["hold_capacity"]:
-            events.append(("hold_full", target))
+            events.append(("hold_full", dict(target, action=action, required=quantity,
+                                             free=self.t["hold_capacity"] - len(self.hold))))
             return False
         self.hold.extend([kind] * quantity)
         return True
@@ -151,9 +156,9 @@ class GatherSim:
             return
         kind, quantity = node["kind"], self.t["node_yield"]
         target = {"node_id": node["id"]}
-        if self._collect(kind, quantity, target, events):
+        if self._collect(kind, quantity, "gather", target, events):
             node["regrow_ticks"] = round(self.t["regrow_s"] * self.hz)
-            events.append(("gather", dict(target, kind=kind, qty=quantity)))
+            events.append(("gather", dict(target, kind=kind, amount=quantity)))
 
     def _catch(self, events):
         fish = self._closest(self.fish, self.t["catch_radius"])
@@ -162,10 +167,10 @@ class GatherSim:
         kind = fish["kind"]
         quantity = self.t["fish_yield"][kind]
         target = {"fish_id": fish["id"]}
-        if self._collect(kind, quantity, target, events):
+        if self._collect(kind, quantity, "catch", target, events):
             self.fish.remove(fish)
             self.catch_cd_ticks = round(self.t["catch_cooldown_s"] * self.hz)
-            events.append(("fish_caught", dict(target, kind=kind, qty=quantity)))
+            events.append(("fish_caught", dict(target, kind=kind, **{"yield": quantity})))
 
     def _at_surface(self) -> bool:
         return self.pos[1] <= self.t["surface_depth"]

@@ -2,7 +2,6 @@
 
 import json
 import math
-from collections import Counter
 
 from .errors import BadInput
 from .inventory import KINDS_P1, validate_items
@@ -146,11 +145,15 @@ def _validate_quan(b, tuning):
         reputation = b["reputation"]
         if not _num(reputation) or not quan["reputation_min"] <= reputation <= quan["reputation_max"]:
             raise BadInput("quan.reputation ngoài giới hạn")
+    def dish_payload(dish):
+        if (not isinstance(dish, dict) or set(dish) != {"order_id", "dish_id", "base_price"}
+                or not isinstance(dish["order_id"], str) or not isinstance(dish["dish_id"], str)
+                or dish["dish_id"] not in menu):
+            raise BadInput("payload món không hợp lệ")
+        _nonneg_int("base_price", dish["base_price"])
+
     if b.get("hand") is not None:
-        hand = b["hand"]
-        dish_id = hand.get("dish_id") if isinstance(hand, dict) else hand
-        if not isinstance(dish_id, str) or dish_id not in menu:
-            raise BadInput("quan.hand phải chứa món hợp lệ")
+        dish_payload(b["hand"])
     for arr in ("stoves", "tables", "customers"):
         if arr in b:
             _check_ids(arr, b[arr])
@@ -177,18 +180,19 @@ def _validate_quan(b, tuning):
         dish = stove.get("dish")
         if state not in ("idle", "cooking", "ready"):
             raise BadInput("trạng thái bếp không hợp lệ")
-        if state == "idle":
-            if dish is not None or stove.get("cook_ticks_left", 0) or stove.get("ready_ticks", 0):
-                raise BadInput("bếp rảnh không thể có món")
-        elif not isinstance(dish, str) or dish not in menu:
-            raise BadInput("bếp đang sử dụng phải có món hợp lệ")
         for field in ("cook_ticks_left", "ready_ticks"):
             if field in stove:
                 _nonneg_int(field, stove[field])
+        cook, ready = stove.get("cook_ticks_left", 0), stove.get("ready_ticks", 0)
+        if state == "idle" and (dish is not None or cook or ready):
+            raise BadInput("bếp rảnh không thể có món")
+        if state != "idle":
+            dish_payload(dish)
+            if (state == "cooking" and (not cook or ready)) or (state == "ready" and cook):
+                raise BadInput("timer bếp mâu thuẫn với trạng thái")
 
     known_tables = {table["id"] for table in quan["tables"]}
     occupied = set()
-    reserved = Counter()
     for customer in b.get("customers", []):
         table_id = customer.get("table_id")
         if not isinstance(table_id, str) or table_id not in known_tables:
@@ -199,26 +203,16 @@ def _validate_quan(b, tuning):
         dish_id = customer.get("dish_id")
         if not isinstance(dish_id, str) or dish_id not in menu:
             raise BadInput("đơn của khách phải có món hợp lệ")
-        state = customer.get("state", "assigned")
-        if state == "assigned":
-            recipe = menu[dish_id]["recipe"]
-            reservation = validate_items(customer.get("reserved", recipe))
-            if reservation and reservation != recipe:
-                raise BadInput("đơn giữ chỗ phải khớp công thức")
-            reserved.update(reservation)
-            if "patience_ticks_left" in customer:
-                _nonneg_int("patience_ticks_left", customer["patience_ticks_left"])
-        elif state == "eating":
-            if customer.get("reserved"):
-                raise BadInput("khách đang ăn không giữ chỗ nguyên liệu")
-            for field in ("eat_ticks_left", "price", "tip"):
-                _nonneg_int(field, customer.get(field))
+        state = customer.get("state", "waiting")
+        status = customer.get("order_status", "reserved")
+        for field in ("order_tick", "patience_ticks_left", "eat_ticks_left", "base_price", "tip"):
+            if field in customer:
+                _nonneg_int(field, customer[field])
+        if state == "waiting" and status in ("reserved", "assigned", "unfulfillable"):
+            if customer.get("eat_ticks_left", 0) or (status != "reserved" and customer.get("reserved")):
+                raise BadInput("trạng thái và phần giữ của khách mâu thuẫn")
+        elif state == "eating" and status == "served":
+            if not customer.get("eat_ticks_left") or not {"base_price", "tip"} <= set(customer) or customer.get("reserved"):
+                raise BadInput("khách đang ăn cần timer, giá và boa hợp lệ")
         else:
             raise BadInput("trạng thái khách không hợp lệ")
-    if "stock" in b:
-        validate_reservations(reserved, b["stock"])
-
-
-def validate_reservations(reserved, stock):
-    if any(quantity > stock.get(kind, 0) for kind, quantity in reserved.items()):
-        raise BadInput("nguyên liệu giữ chỗ vượt kho")
