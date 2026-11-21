@@ -5,6 +5,7 @@ import math
 
 from ..errors import BadInput
 from ..ids import id_key, sort_by_id
+from ..inventory import validate_items
 from ..scenario import validate_reservations
 from .ramp import ramp_velocity
 
@@ -79,7 +80,7 @@ class QuanSim:
         if customer["state"] == "assigned":
             customer.setdefault("patience_ticks_left", self._ticks(self.t["patience_s"]))
             recipe = self.menu.get(customer.get("dish_id"), {}).get("recipe", {})
-            customer["reserved"] = dict(source.get("reserved", recipe))
+            customer["reserved"] = validate_items(source.get("reserved", recipe))
         else:
             customer["reserved"] = {}
         return customer

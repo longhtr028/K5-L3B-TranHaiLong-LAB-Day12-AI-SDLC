@@ -3,19 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quán Ăn Chợ Nổi — chơi thử</title>
+<title>Quán Ăn Chợ Nổi</title>
 <style>
   html, body { margin: 0; height: 100%; background: #10161c; color: #e8eef2; font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
   canvas { display: block; width: 100vw; height: 100vh; }
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c" aria-label="Quán Ăn Chợ Nổi. WASD hoặc mũi tên để di chuyển, E để tương tác, Space để bắt cá và R để chơi lại."></canvas>
 <script>
 "use strict";
 /*
  * Client chơi trực tiếp (starter). CHỈ ĐỌC snapshot từ GET /state và gửi phím qua POST /input.
- * Trường nào snapshot chưa có thì bỏ qua (nhóm viết luật tới đâu, hình hiện tới đó). Hình khối tạm, thay bằng đồ họa của nhóm.
  * Phím: WASD / mũi tên = di chuyển · E = interact · Space = catch · R = chơi lại.
  */
 const cv = document.getElementById("c");
@@ -51,7 +50,7 @@ async function flush() {
   }
   inflight = false;
 }
-function keyName(e) { return e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase(); }
+function keyName(e) { return e.key.toLowerCase(); }
 addEventListener("keydown", (e) => {
   const k = keyName(e);
   if (e.repeat) { if (k === " " || k.startsWith("arrow")) e.preventDefault(); return; }
@@ -85,6 +84,18 @@ poll();
 const KIND_COLOR = { ca_loc: "#7c9a52", ca_linh: "#d6e6f2", ca_keo: "#d9a066", bong_dien_dien: "#f2c230", bong_sung: "#e8799c", keo_neo: "#8fcf6b" };
 const KIND_NAME = { ca_loc: "cá lóc", ca_linh: "cá linh", ca_keo: "cá kèo", bong_dien_dien: "điên điển", bong_sung: "bông súng", keo_neo: "kèo nèo" };
 const kc = (k) => KIND_COLOR[k] || "#bbbbbb";
+const DISH_NAME = {
+  ca_loc_nuong_trui: "Cá lóc nướng trui",
+  goi_bong_sung: "Gỏi bông súng",
+  lau_ca_linh_dien_dien: "Lẩu cá linh điên điển",
+};
+const dishName = (dish) => DISH_NAME[dish] || dish;
+const END_REASON = {
+  docked: "Út Sen đã cập bến",
+  fainted: "Út Sen ngất vì thiếu oxy",
+  time: "Hết giờ",
+  error: "Có lỗi khi chạy trò chơi",
+};
 
 function fit() {
   const dpr = window.devicePixelRatio || 1;
@@ -110,20 +121,43 @@ function fmtTime(ticks) {
   const s = Math.ceil(ticks / 60);
   return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
 }
-function brief(d) {
-  try { const s = JSON.stringify(d); return s.length > 60 ? s.slice(0, 57) + "…" : s; } catch (e) { return ""; }
+function eventMessage(event) {
+  const d = event.data;
+  switch (event.name) {
+    case "gather":
+    case "fish_caught": return `+ ${d.qty} ${KIND_NAME[d.kind]}`;
+    case "hold_full": return "Giỏ đã đầy";
+    case "oxygen_empty": return "Hết oxy. Bơi lên mặt nước!";
+    case "choke": return `Thiếu oxy · còn ${d.hp} máu`;
+    case "customer_arrived": return `Bàn ${d.table_id} gọi ${dishName(d.dish_id)}`;
+    case "no_dish": return "Chưa đủ nguyên liệu để nhận thêm khách";
+    case "customer_left": return `Khách ở bàn ${d.table_id} đã rời đi`;
+    case "cook_started": return `Đang nấu ${dishName(d.dish_id)}`;
+    case "dish_ready": return `${dishName(d.dish_id)} đã chín`;
+    case "served": return `Đã phục vụ bàn ${d.table_id}`;
+    case "paid": return d.tip ? `+ ${d.amount}k (boa ${d.tip}k)` : `+ ${d.amount}k`;
+    default: return "";
+  }
 }
 function eventLog(w, h) {
-  const ev = (snap.events || []).slice(-6);
-  ev.forEach((e, i) => text(`t${e.tick} ${e.name} ${brief(e.data)}`, w - 10, h - 70 - (ev.length - 1 - i) * 15, { size: 11, align: "right", color: "rgba(232,238,242,.75)" }));
+  const messages = (snap.events || []).filter((e) => snap.tick - e.tick < 210)
+    .map(eventMessage).filter(Boolean).slice(-3);
+  messages.forEach((message, i) => text(message, w - 14, h - 46 - (messages.length - 1 - i) * 17,
+    { size: 13, align: "right", color: "#f6ead7" }));
 }
 function overlay(w, h) {
   if (offline) text("Mất kết nối tới máy chủ (đã tắt chưa?)", w / 2, 30, { align: "center", color: "#ff8a80", size: 16 });
   if (snap.error) text("Luật của nhóm báo lỗi — xem terminal. R để chơi lại.", w / 2, 52, { align: "center", color: "#ff8a80", size: 15 });
   if (snap.finished) {
-    ctx.fillStyle = "rgba(0,0,0,.55)"; ctx.fillRect(w / 2 - 190, h / 2 - 50, 380, 100);
-    text("Buổi " + (snap.mode === "gather" ? "sáng" : "tối") + " kết thúc: " + (snap.reason || ""), w / 2, h / 2 - 12, { align: "center", size: 20 });
-    text("Nhấn R để chơi lại", w / 2, h / 2 + 20, { align: "center", color: "#cfd8dc" });
+    const width = Math.min(430, w - 24);
+    ctx.fillStyle = "rgba(12,24,30,.93)";
+    ctx.fillRect((w - width) / 2, h / 2 - 66, width, 132);
+    text(END_REASON[snap.reason] || "Kết thúc buổi chơi", w / 2, h / 2 - 25, { align: "center", size: 19 });
+    const result = snap.mode === "gather"
+      ? `Nguyên liệu trong giỏ · ${snap.hold_count}`
+      : `Tiền ${snap.money}k · Điểm ${snap.score}`;
+    text(result, w / 2, h / 2 + 4, { align: "center", color: "#f6ead7" });
+    text("Nhấn R để chơi lại", w / 2, h / 2 + 34, { align: "center", color: "#a4c2cc" });
   }
 }
 
@@ -199,7 +233,7 @@ function drawGather(w, h) {
   if (p && p.catch_cd_ticks > 0) text("hồi chiêu bắt " + (p.catch_cd_ticks / 60).toFixed(1) + "s", 150, 52, { size: 12, color: "#9fb3c0" });
   // giỏ (khoang) dưới
   if (snap.hold && snap.hold_capacity) {
-    const cap = snap.hold_capacity, sz = Math.min(30, (w - 260) / cap - 4), y0 = h - bottom + 8;
+    const cap = snap.hold_capacity, sz = Math.max(8, Math.min(30, (w - 28) / cap - 4)), y0 = h - bottom + 8;
     for (let i = 0; i < cap; i++) {
       const x0 = 14 + i * (sz + 4);
       ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(x0, y0, sz, sz);
@@ -226,7 +260,7 @@ function drawQuan(w, h) {
     const col = st.state === "cooking" ? "#e8892b" : st.state === "ready" ? "#6fbf5a" : "#6d6d72";
     ctx.fillStyle = col; ctx.fillRect(sx(st.pos[0]) - 0.8 * s, sy(st.pos[1]) - 0.8 * s, 1.6 * s, 1.6 * s);
     text(st.id, sx(st.pos[0]), sy(st.pos[1]) + 4, { size: 12, align: "center", color: "#111" });
-    if (st.dish) text(st.dish, sx(st.pos[0]), sy(st.pos[1]) - 0.95 * s, { size: 10, align: "center", color: "#2a1a0a" });
+    if (st.dish) text(dishName(st.dish), sx(st.pos[0]), sy(st.pos[1]) - 0.95 * s, { size: 10, align: "center", color: "#2a1a0a" });
     if (st.state === "cooking" && st.cook_ticks_left !== undefined) text(Math.ceil(st.cook_ticks_left / 60) + "s", sx(st.pos[0]), sy(st.pos[1]) + 1.25 * s, { size: 11, align: "center", color: "#2a1a0a" });
   });
   // bàn + khách
@@ -240,8 +274,13 @@ function drawQuan(w, h) {
     if (c) {
       const cx = sx(tb.pos[0]), cy = sy(tb.pos[1]) - 1.5 * s;
       ctx.fillStyle = c.state === "eating" ? "#7bc67b" : "#f4b6c2"; ctx.beginPath(); ctx.arc(cx, cy, 0.55 * s, 0, Math.PI * 2); ctx.fill();
-      text(c.dish_id || "?", cx, cy - 0.75 * s, { size: 10, align: "center", color: "#2a1a0a" });
-      if (c.patience_ticks_left !== undefined) bar(cx - 0.8 * s, cy + 0.65 * s, 1.6 * s, 5, c.patience_ticks_left / patMax, "#e57373");
+      text(dishName(c.dish_id || "?"), cx, cy - 0.75 * s, { size: 10, align: "center", color: "#2a1a0a" });
+      if (c.state === "assigned") {
+        bar(cx - 0.8 * s, cy + 0.65 * s, 1.6 * s, 5, c.patience_ticks_left / patMax, "#e57373");
+      } else if (c.state === "eating") {
+        text(`Đang ăn · ${Math.ceil(c.eat_ticks_left / 60)}s`, cx, cy + 0.92 * s,
+          { size: 10, align: "center", color: "#2a1a0a" });
+      }
     }
   });
   // người chơi
@@ -252,7 +291,7 @@ function drawQuan(w, h) {
     ctx.fillStyle = "#ff8a3d"; ctx.beginPath(); ctx.arc(px, py, 0.5 * s, 0, Math.PI * 2); ctx.fill();
     if (snap.hand) {
       const hand = typeof snap.hand === "string" ? snap.hand : (snap.hand.dish_id || "món");
-      text("🍲 " + hand, px, py - 0.8 * s, { size: 11, align: "center", color: "#2a1a0a" });
+      text("🍲 " + dishName(hand), px, py - 0.8 * s, { size: 11, align: "center", color: "#2a1a0a" });
     }
   }
   // HUD

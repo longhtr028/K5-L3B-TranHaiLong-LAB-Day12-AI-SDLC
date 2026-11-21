@@ -1,2 +1,5 @@
 # Credits
-Liệt kê asset ngoài (nguồn, giấy phép CC0/CC-BY/MIT) và công cụ AI đã dùng.
+
+- **Khung bài lab, nhân vật và bối cảnh** · [VinUni AI20k](https://github.com/VinUni-AI20k/K5-L3B-LAB-Day12-AI-SDLC).
+- **Hiển thị** · Canvas và hình vẽ lập trình từ starter, dùng font hệ thống. Phase 1 không có asset bên ngoài.
+- **Hỗ trợ AI** · OpenAI Codex. Xem [nhật ký sử dụng](docs/ai-usage-log.md).
