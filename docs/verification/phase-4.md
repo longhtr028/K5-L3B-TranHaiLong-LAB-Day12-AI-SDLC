@@ -7,7 +7,7 @@
 | AC-P4-03 | Chrome ở chế độ tương phản cao hiện đủ ba cảnh báo bằng chữ | [Gather](../proof/phase-4/warnings-gather.png) · [Quán](../proof/phase-4/warnings-quan.png) |
 | AC-P4-04 | Từ clone sạch, test và máy chủ chạy một lệnh sau khi clone và vào thư mục | [Lệnh chạy](../../README.md#chơi-từ-clone-sạch) |
 | AC-P4-05 | Hồi quy và màn hình Ngày | 43 test đạt. Chrome mở menu, thực đơn, Quán, kết quả, Shop và tổng kết từ fixture 1 Ngày. |
-| AC-P4-06 | Gói người dùng và demo dưới 5 phút | [Release v1.0.0](https://github.com/longhtr028/K5-L3B-LAB-Day12-AI-SDLC/releases/tag/v1.0.0) |
+| AC-P4-06 | Gói người dùng và demo dưới 5 phút | [Release v1.0.0](https://github.com/longhtr028/K5-L3B-LAB-Day12-AI-SDLC-hai-long/releases/tag/v1.0.0) |
 
 [Changelog](../../CHANGELOG.md) · [Retro](../retro.md) · [Hồ sơ cá nhân](../members/longhtr028.md)
 

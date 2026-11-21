@@ -11,8 +11,8 @@ Nhóm một người · Test Contract v1.3
 Yêu cầu macOS hoặc Linux, Python 3.9+ và trình duyệt cho bản chơi. Không cần cài package Python. Benchmark cần Chrome hoặc Chromium.
 
 ```sh
-git clone https://github.com/longhtr028/K5-L3B-LAB-Day12-AI-SDLC.git
-cd K5-L3B-LAB-Day12-AI-SDLC
+git clone https://github.com/longhtr028/K5-L3B-LAB-Day12-AI-SDLC-hai-long.git
+cd K5-L3B-LAB-Day12-AI-SDLC-hai-long
 python3 -m chonoi.live --mode day
 ```
 
