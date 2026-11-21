@@ -38,7 +38,7 @@ class Gameplay(unittest.TestCase):
         with Workdir() as work:
             rows = self.headless(work, "gather", round(g["regrow_s"] * TUNING["tick_hz"]) + 10, {
                 "player": {"pos": [12, g["surface_depth"] + 0.001], "oxygen_ticks": 1},
-                "nodes": [{"id": "N10", "kind": "bong_sung", "pos": [11, 0]},
+                "random_fish": False, "nodes": [{"id": "N10", "kind": "bong_sung", "pos": [11, 0]},
                           {"id": "N2", "kind": "bong_dien_dien", "pos": [13, 0]}],
             }, [{"tick": 0, "move": [0, -1], "interact": True}])
             self.assertEqual([e["name"] for e in events(rows)], ["surface", "gather", "node_regrown"])

@@ -1,97 +1,182 @@
-"""Vòng tick (Contract B, mô hình tick). KHUNG — thường không cần sửa.
-
-Thứ tự ghi: snapshot tick 0 -> với mỗi bước: sự kiện (theo thứ tự xử lý) rồi snapshot (nếu tới lượt
-hoặc buổi kết thúc) -> dòng 'end'. Mỗi tick tối đa một snapshot.
-
-`Session` là API bước tick gọn dùng chung cho headless (`run`) và cửa sổ chơi trực tiếp (`chonoi.live`):
-cả hai chạy CÙNG một lớp sim, không nhân đôi logic.
-"""
+"""Phiên mô phỏng dùng chung cho CLI, cửa sổ chơi và soak."""
 
 import math
+from collections import Counter
 
+from .errors import BadInput
 from .ids import IdAllocator
-from .inputs import InputPlayer
+from .inputs import BUTTONS, InputPlayer
 from .inventory import write_inventory
 from .jsonl import JsonlWriter
 from .rng import Streams
 from .sim.gather import GatherSim
 from .sim.quan import QuanSim
+from .sim.shop import ShopSim
 
 
-def build_sim(mode, tuning, scenario, seed, inventory):
-    streams, ids = Streams(seed), IdAllocator()
-    if mode == "gather":
-        return GatherSim(tuning, scenario, streams, ids)
-    return QuanSim(tuning, scenario, streams, ids, inventory=inventory)
-
-
-def _common(sim, tick, sim_tick, phase_tick, tuning, state):
-    mult = tuning["score"]["reputation_multiplier"]
-    return {
-        "type": "snapshot", "tick": tick, "sim_tick": sim_tick, "mode": sim.mode, "phase": sim.phase,
-        "phase_tick": phase_tick, "state": state, "time_left_ticks": sim.time_left_ticks,
-        "money": sim.money, "earned": sim.earned, "reputation": sim.reputation,
-        "score": sim.earned + mult * math.floor(sim.reputation),
-    }
+def day_plans(tuning, overrides):
+    if not isinstance(overrides, list):
+        raise BadInput("day.day_plan phải là mảng")
+    plans = {p["day"]: p for p in tuning["day_plan"]}
+    seen = set()
+    for plan in overrides:
+        if not isinstance(plan, dict) or set(plan) - {"day", "dishes", "ingredients"}:
+            raise BadInput("kế hoạch ngày không hợp lệ")
+        day, dishes = plan.get("day"), plan.get("dishes")
+        if type(day) is not int or day not in plans or day in seen or not isinstance(dishes, dict) or not dishes:
+            raise BadInput("ngày hoặc thực đơn trong kế hoạch không hợp lệ")
+        ingredients = Counter()
+        for dish, servings in dishes.items():
+            if dish not in tuning["menu"] or type(servings) is not int or servings <= 0:
+                raise BadInput("món và số suất không hợp lệ")
+            for key, units in tuning["menu"][dish]["recipe"].items():
+                ingredients[key] += units * servings
+        if plan.get("ingredients", ingredients) != ingredients:
+            raise BadInput("nguyên liệu trong kế hoạch mâu thuẫn với thực đơn")
+        plans[day] = {"day": day, "dishes": dishes, "ingredients": dict(ingredients)}
+        seen.add(day)
+    return plans
 
 
 class Session:
-    """Một lượt chơi: dựng sim, bước từng tick, lấy snapshot / dòng end."""
+    def __init__(self, mode, tuning, scenario, seed, inventory=None, days=1):
+        self.mode, self.tuning, self.scenario = mode, tuning, scenario
+        self.streams, self.ids = Streams(seed), IdAllocator()
+        self.tick = self.sim_tick = self.phase_tick = 0
+        self.paused = self.done = False
+        self.reason = None
+        self.days, self.day, self.days_completed = days, 1, 0
+        self.initial_events = []
+        if mode == "day":
+            state = scenario.get("day", {})
+            self.plans = day_plans(tuning, state.get("day_plan", []))
+            self.upgrades = dict(state.get("upgrades", {}))
+            self._start_day(state.get("money", 0), state.get("earned", 0),
+                            state.get("reputation", tuning["quan"]["reputation_initial"]))
+            self.initial_events = self._start_events()
+        elif mode == "gather":
+            self.sim = GatherSim(tuning, scenario, self.streams, self.ids)
+        else:
+            self.sim = QuanSim(tuning, scenario, self.streams, self.ids, inventory)
 
-    def __init__(self, mode, tuning, scenario, seed, inventory=None):
-        self.mode = mode
-        self.tuning = tuning
-        self.sim = build_sim(mode, tuning, scenario, seed, inventory)
-        self.tick = 0
+    def _start_day(self, money, earned, reputation):
+        self.active_upgrades = dict(self.upgrades)
+        self.plan = self.plans[(self.day - 1) % len(self.plans) + 1]
+        gather = dict(self.tuning["gather"])
+        for key, level in self.active_upgrades.items():
+            if level:
+                stats = self.tuning["shop"]["upgrades"][key][level - 1]
+                gather.update({name: value for name, value in stats.items() if name not in ("level", "price")})
+        tuning = dict(self.tuning, gather=gather)
+        self.sim = GatherSim(tuning, self.scenario.get("gather", {}), self.streams, self.ids, self.day)
+        self.sim.money, self.sim.earned, self.sim.reputation = money, earned, reputation
 
-    @property
-    def done(self) -> bool:
-        return self.sim.done
+    def _start_events(self):
+        return [self._event("day_start", {}), self._event("day_plan", {
+            key: self.plan[key] for key in ("dishes", "ingredients")}), self._event("phase_start", {})]
 
-    def snapshot(self) -> dict:
-        s = _common(self.sim, self.tick, self.tick, self.tick, self.tuning, "finished" if self.sim.done else "playing")
-        s.update(self.sim.snapshot())
-        return s
+    def _event(self, name, data):
+        event = {"type": "event", "tick": self.tick, "phase": self.sim.phase, "name": name, "data": data}
+        if self.mode == "day":
+            event["day"] = self.day
+        return event
 
-    def step(self, inp) -> list:
-        """Chạy một bước với `inp` (chonoi.inputs.InputState); trả các dòng event (tick = k + 1)."""
-        events = self.sim.step(inp)
-        self.tick += 1
-        return [{"type": "event", "tick": self.tick, "phase": self.sim.phase, "name": name, "data": data}
-                for name, data in events]
-
-    def end_row(self) -> dict:
+    def _totals(self):
         sim = self.sim
-        score = _common(sim, self.tick, self.tick, self.tick, self.tuning, "")["score"]
-        return {"type": "end", "ticks": self.tick, "sim_tick": self.tick, "mode": sim.mode,
-                "state": "finished" if sim.done else "playing",
-                "reason": sim.reason if sim.done else "tick_limit",
-                "money": sim.money, "earned": sim.earned, "reputation": sim.reputation, "score": score}
+        score = sim.earned + self.tuning["score"]["reputation_multiplier"] * math.floor(sim.reputation)
+        return {"money": sim.money, "earned": sim.earned, "reputation": sim.reputation, "score": score}
+
+    def _state(self):
+        return "finished" if self.done else "paused" if self.paused else "playing"
+
+    def snapshot(self):
+        snapshot = {"type": "snapshot", "tick": self.tick, "sim_tick": self.sim_tick, "mode": self.mode,
+                    "phase": self.sim.phase, "phase_tick": self.phase_tick, "state": self._state(),
+                    "time_left_ticks": self.sim.time_left_ticks, **self._totals(), **self.sim.snapshot()}
+        if self.mode == "day":
+            snapshot.update(day=self.day, day_plan=self.plan, upgrades=self.upgrades,
+                            active_upgrades=self.active_upgrades)
+        return snapshot
+
+    def step(self, inp):
+        if self.done:
+            return []
+        self.tick += 1
+        events = []
+        if inp.pressed("pause"):
+            self.paused = not self.paused
+            events.append(self._event("paused" if self.paused else "resumed", {}))
+        if self.paused:
+            return events
+        self.sim_tick += 1
+        self.phase_tick += 1
+        events.extend(self._event(name, data) for name, data in self.sim.step(inp))
+        if self.sim.done:
+            events.extend(self._advance())
+        return events
+
+    def _advance(self):
+        previous = self.sim
+        if self.mode != "day":
+            self.done, self.reason = True, previous.reason
+            return []
+        if previous.phase == "gather":
+            scenario = dict(self.scenario.get("quan", {}), reputation=previous.reputation)
+            self.sim = QuanSim(self.tuning, scenario, self.streams, self.ids, previous.inventory_items(),
+                               allowed_dishes=self.plan["dishes"])
+            self.sim.money, self.sim.earned = previous.money, previous.earned
+        elif previous.phase == "quan":
+            self.sim = ShopSim(self.tuning, previous.stock, previous, self.upgrades)
+        else:
+            self.days_completed += 1
+            if self.days_completed == self.days:
+                self.done, self.reason = True, "days_complete"
+                return []
+            self.day += 1
+            self.phase_tick = 0
+            self._start_day(previous.money, previous.earned, previous.reputation)
+            return self._start_events()
+        self.phase_tick = 0
+        return [self._event("phase_start", {})]
+
+    def end_row(self):
+        row = {"type": "end", "ticks": self.tick, "sim_tick": self.sim_tick, "mode": self.mode,
+               "state": self._state(), "reason": self.reason if self.done else "tick_limit", **self._totals()}
+        if self.mode == "day":
+            row["days_completed"] = self.days_completed
+        return row
 
     def write_inventory_if_done(self, inventory_out):
-        """File kho: ghi MỘT lần khi có gather_end; chưa kết thúc thì giữ nguyên file đích."""
-        if self.mode == "gather" and self.sim.done and inventory_out:
+        if self.mode == "gather" and self.done and inventory_out:
             write_inventory(inventory_out, self.sim.inventory_items())
 
 
-def run(mode, tuning, scenario, seed, frames, ticks, out_path, snapshot_every, inventory=None, inventory_out=None):
-    sess = Session(mode, tuning, scenario, seed, inventory)
-    player = InputPlayer(frames)
-    w = JsonlWriter(out_path)
+def run(mode, tuning, scenario, seed, frames, ticks, out_path, snapshot_every, inventory=None,
+        inventory_out=None, days=1):
+    sess = Session(mode, tuning, scenario, seed, inventory, days)
+    player = InputPlayer(frames, BUTTONS)
+    writer = JsonlWriter(out_path)
     try:
-        w.write(sess.snapshot())  # tick 0: sau khi dựng scenario, trước mọi input
+        for event in sess.initial_events:
+            writer.write(event)
+        writer.write(sess.snapshot())
         last_snapped = 0
         while sess.tick < ticks and not sess.done:
-            inp = player.advance(sess.tick)  # bước k đọc input có tick == k
-            for row in sess.step(inp):
-                w.write(row)
-            if sess.tick % snapshot_every == 0 or sess.done:
-                w.write(sess.snapshot())
+            phase = sess.sim.phase
+            for row in sess.step(player.advance(sess.tick)):
+                writer.write(row)
+            if sess.tick % snapshot_every == 0 or sess.done or phase != sess.sim.phase:
+                writer.write(sess.snapshot())
                 last_snapped = sess.tick
         if last_snapped != sess.tick:
-            w.write(sess.snapshot())
-        w.write(sess.end_row())
+            writer.write(sess.snapshot())
+        writer.write(sess.end_row())
+    except BadInput:
+        writer.close()
+        import os
+        os.unlink(out_path)
+        raise
     finally:
-        w.close()
+        writer.close()
     sess.write_inventory_if_done(inventory_out)
     return sess.sim

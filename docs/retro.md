@@ -10,3 +10,9 @@
 ## Phase 2 và Phase 4
 
 Chưa tiến hành retro cho các phase này.
+
+## Phase 2
+
+- Phát hiện thông tin chính thức qua phiên Firefox, sửa xử lý giao món ở tick cuối trước khi phát triển nhiều bàn.
+- Giữ fixture Quán độc lập và chạy thêm luồng tích hợp tiền, pause và Shop.
+- Hành động cho Phase 3 của người thực hiện solo: tập trung đổi schema ở giới hạn bàn giao kho, giữ regression ở hai đầu.

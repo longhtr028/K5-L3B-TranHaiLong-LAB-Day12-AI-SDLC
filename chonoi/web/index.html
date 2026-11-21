@@ -7,10 +7,19 @@
 <style>
   html, body { margin: 0; height: 100%; background: #10161c; color: #e8eef2; font: 14px/1.4 system-ui, sans-serif; overflow: hidden; }
   canvas { display: block; width: 100vw; height: 100vh; }
+  #dialog { position: absolute; inset: 0; display: grid; place-items: center; background: #0b1f27bd; }
+  #dialog[hidden] { display: none; }
+  .panel { width: min(90vw, 620px); box-sizing: border-box; padding: 28px; border: 1px solid #95aeb5;
+    border-radius: 18px; background: #14272e; color: #faf3e4; font-size: 18px; }
+  .panel h1 { margin-top: 0; font: bold 32px Georgia, serif; }
+  .panel button { padding: 8px 16px; margin: 5px 8px 5px 0; font: inherit; border: 1px solid #ffd991;
+    border-radius: 8px; background: #f5cc80; color: #21221e; cursor: pointer; }
+  .panel button:disabled { opacity: .55; cursor: default; }
 </style>
 </head>
 <body>
 <canvas id="c" aria-label="Quán Ăn Chợ Nổi. WASD hoặc mũi tên để di chuyển, E để tương tác, Space để bắt cá và R để chơi lại."></canvas>
+<div id="dialog" hidden><div class="panel" id="panel"></div></div>
 <script>
 "use strict";
 /*
@@ -19,6 +28,11 @@
  */
 const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
+const dialog = document.getElementById("dialog");
+const panel = document.getElementById("panel");
+let screenKey = "", introTimer;
+const command = (path) => fetch(path, {method: "POST"});
+const input = (body) => fetch("/input", {method: "POST", body: JSON.stringify(body)});
 let snap = null, offline = false;
 
 // ---------- vào: phím ----------
@@ -27,11 +41,11 @@ const MOVE_KEYS = { w: "u", arrowup: "u", s: "d", arrowdown: "d", a: "l", arrowl
 let queue = [], inflight = false, lastSent = "";
 
 function currentInput() {
-  const mode = snap ? snap.mode : "gather";
+  const mode = snap ? snap.phase : "gather";
   const dx = (down.has("r") ? 1 : 0) - (down.has("l") ? 1 : 0);
   let dy = (down.has("d") ? 1 : 0) - (down.has("u") ? 1 : 0);   // gather: xuống = d dương
   if (mode === "quan") dy = -dy;                                // quan: lên (bắc) = z dương
-  return { move: [dx, dy], interact: down.has("interact"), catch: down.has("catch") };
+  return { move: [dx, dy], interact: down.has("interact"), catch: down.has("catch"), pause: down.has("pause") };
 }
 function pushInput() {
   const s = JSON.stringify(currentInput());
@@ -54,6 +68,10 @@ function keyName(e) { return e.key.toLowerCase(); }
 addEventListener("keydown", (e) => {
   const k = keyName(e);
   if (e.repeat) { if (k === " " || k.startsWith("arrow")) e.preventDefault(); return; }
+  if (snap?.screen && (k === "enter" || !["menu", "summary"].includes(snap.screen))) {
+    command("/continue"); e.preventDefault(); return;
+  }
+  if (k === "escape" || k === "p") { down.add("pause"); e.preventDefault(); }
   if (MOVE_KEYS[k]) { down.add(MOVE_KEYS[k]); e.preventDefault(); }
   else if (k === "e") down.add("interact");
   else if (k === " ") { down.add("catch"); e.preventDefault(); }
@@ -62,6 +80,7 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("keyup", (e) => {
   const k = keyName(e);
+  if (k === "escape" || k === "p") down.delete("pause");
   if (MOVE_KEYS[k]) down.delete(MOVE_KEYS[k]);
   else if (k === "e") down.delete("interact");
   else if (k === " ") down.delete("catch");
@@ -75,6 +94,7 @@ async function poll() {
     const r = await fetch("/state", { cache: "no-store" });
     snap = await r.json();
     offline = false;
+    updateDialog();
   } catch (e) { offline = true; }
   setTimeout(poll, 16);
 }
@@ -88,8 +108,92 @@ const DISH_NAME = {
   ca_loc_nuong_trui: "Cá lóc nướng trui",
   goi_bong_sung: "Gỏi bông súng",
   lau_ca_linh_dien_dien: "Lẩu cá linh điên điển",
+  canh_chua_ca_loc: "Canh chua cá lóc bông điên điển",
+  ca_keo_nuong: "Cá kèo nướng muối ớt",
+  lau_mam: "Lẩu mắm miền Tây",
 };
 const dishName = (dish) => DISH_NAME[dish] || dish;
+function contents(stock) {
+  if (!Array.isArray(stock)) return stock || {};
+  const quantities = {};
+  for (const item of stock) {
+    const kind = typeof item === "string" ? item : item.kind;
+    quantities[kind] = (quantities[kind] || 0) + 1;
+  }
+  return quantities;
+}
+function quantities(stock) {
+  return Object.entries(contents(stock)).map(([k, n]) => `${KIND_NAME[k] || k} ×${n}`).join(", ") || "Kho trống";
+}
+function updateDialog() {
+  const view = snap.state === "paused" ? "pause" : snap.screen || (snap.phase === "shop" ? "shop" : "");
+  dialog.hidden = !view;
+  const key = JSON.stringify([view, snap.day, snap.upgrades, snap.money]);
+  if (key === screenKey) return;
+  screenKey = key;
+  clearTimeout(introTimer);
+  if (!view) return;
+  panel.replaceChildren();
+  function line(value, tag = "p") {
+    const element = document.createElement(tag);
+    element.textContent = value;
+    panel.append(element);
+  }
+  function button(label, callback, disabled = false) {
+    const element = document.createElement("button");
+    element.textContent = label;
+    element.disabled = disabled;
+    element.addEventListener("click", callback);
+    panel.append(element);
+  }
+  const advance = () => command("/continue");
+  if (view === "menu") {
+    line("Quán Ăn Chợ Nổi", "h1");
+    line("Giúp Út Sen lấy nguyên liệu vào buổi sáng và phục vụ khách ở nhà bè vào buổi tối.");
+    button("Chơi", advance);
+    button("Thoát", () => { line("Đã thoát ván. Bạn có thể đóng thẻ trình duyệt."); });
+  } else if (view === "intro") {
+    line(`Ngày ${snap.day} · Thực đơn của Má Tư`, "h1");
+    line(Object.entries(snap.day_plan.dishes).map(([dish, q]) => `${dishName(dish)} ×${q}`).join(", "));
+    line("Cần lấy " + quantities(snap.day_plan.ingredients));
+    button("Ra sông", advance);
+    introTimer = setTimeout(advance, 4000);
+  } else if (view === "evening") {
+    line(`Ngày ${snap.day} · Mở quán`, "h1");
+    line(quantities(snap.stock));
+    line(Object.keys(snap.day_plan.dishes).map(dishName).join(", "));
+    button("Đón khách", advance);
+  } else if (view === "result") {
+    line("Kết quả buổi tối", "h1");
+    const results = snap.summary;
+    line(`Phục vụ ${results.served} · Khách rời ${results.left} · Thu ${results.income}k · Boa ${results.tips}k`);
+    button("Mở cửa hàng", advance);
+  } else if (view === "shop") {
+    line(`Cửa hàng · ${snap.money}k`, "h1");
+    for (const [name, levels] of Object.entries(snap.options)) {
+      const level = snap.upgrades[name] || 0;
+      const label = name === "oxygen" ? "Bình oxy" : "Áo phao";
+      const next = levels[level];
+      button(next ? `${label} cấp ${next.level} · ${next.price}k` : `${label} đã tối đa`,
+        () => input({buy: name}), !next || next.price > snap.money);
+    }
+    button("Đóng cửa hàng", async () => {
+      await input({shop_done: true});
+      await input({shop_done: false});
+    });
+  } else if (view === "pause") {
+    line("Tạm dừng", "h1");
+    button("Tiếp tục", async () => {
+      await input({pause: false}); await input({pause: true}); await input({pause: false});
+    });
+    button("Về menu", () => command("/restart"));
+  } else if (view === "summary") {
+    line("Tổng kết", "h1");
+    line(`Số dư ${snap.money}k · Tổng thu ${snap.earned}k · Uy tín ${snap.reputation} · Điểm ${snap.score}`);
+    button("Về menu", advance);
+  }
+}
+
 const END_REASON = {
   docked: "Út Sen đã cập bến",
   fainted: "Út Sen ngất vì thiếu oxy",
@@ -153,7 +257,7 @@ function overlay(w, h) {
     ctx.fillStyle = "rgba(12,24,30,.93)";
     ctx.fillRect((w - width) / 2, h / 2 - 66, width, 132);
     text(END_REASON[snap.reason] || "Kết thúc buổi chơi", w / 2, h / 2 - 25, { align: "center", size: 19 });
-    const result = snap.mode === "gather"
+    const result = snap.phase === "gather"
       ? `Nguyên liệu trong giỏ · ${snap.hold_count}`
       : `Tiền ${snap.money}k · Điểm ${snap.score}`;
     text(result, w / 2, h / 2 + 4, { align: "center", color: "#f6ead7" });
@@ -205,6 +309,12 @@ function drawGather(w, h) {
     ctx.restore();
     text(f.id, sx(f.pos[0]), sy(f.pos[1]) - 0.7 * s, { size: 10, align: "center", color: "rgba(255,255,255,.8)" });
   });
+  for (const monster of snap.monsters || []) {
+    const [x, d] = monster.pos;
+    ctx.fillStyle = "#527d46";
+    ctx.beginPath(); ctx.ellipse(sx(x), sy(d), 1.7 * s, .55 * s, 0, 0, Math.PI * 2); ctx.fill();
+    text("Cá Sấu", sx(x), sy(d) - .8 * s, {size: 12, align: "center"});
+  }
   // người chơi
   const p = snap.player;
   if (p) {
@@ -231,6 +341,11 @@ function drawGather(w, h) {
   }
   if (p && p.pos) text(`x ${p.pos[0].toFixed(1)}  d ${p.pos[1].toFixed(1)}`, 14, 52, { size: 12, color: "#9fb3c0" });
   if (p && p.catch_cd_ticks > 0) text("hồi chiêu bắt " + (p.catch_cd_ticks / 60).toFixed(1) + "s", 150, 52, { size: 12, color: "#9fb3c0" });
+  if (snap.day_plan) {
+    const found = contents(snap.hold);
+    const targets = Object.entries(snap.day_plan.ingredients).map(([k, n]) => `${KIND_NAME[k]} ${found[k] || 0}/${n}`);
+    text(`Ngày ${snap.day} · ${targets.join(" · ")}`, w - 14, 34, {size: 15, align: "right"});
+  }
   // giỏ (khoang) dưới
   if (snap.hold && snap.hold_capacity) {
     const cap = snap.hold_capacity, sz = Math.max(8, Math.min(30, (w - 28) / cap - 4)), y0 = h - bottom + 8;
@@ -297,7 +412,7 @@ function drawQuan(w, h) {
   // HUD
   text("⏱ " + fmtTime(snap.time_left_ticks), 14, 28, { size: 20 });
   text(`Tiền ${snap.money ?? 0}k · uy tín ${(snap.reputation ?? 0).toFixed(1)} · điểm ${snap.score ?? 0}`, 110, 28, { size: 16 });
-  const stock = snap.stock ? Object.keys(snap.stock).map((k) => (KIND_NAME[k] || k) + "×" + snap.stock[k]).join(", ") : "";
+  const stock = quantities(snap.stock);
   text("Kho: " + (stock || "(trống)"), 14, 52, { size: 13, color: "#cfd8dc" });
   text("WASD/mũi tên đi · E tương tác (bếp / bàn) · R chơi lại", w - 10, h - 14, { size: 12, align: "right", color: "#9fb3c0" });
 }
@@ -307,7 +422,8 @@ function frame() {
   const [w, h] = fit();
   ctx.fillStyle = "#10161c"; ctx.fillRect(0, 0, w, h);
   if (snap) {
-    if (snap.mode === "quan") drawQuan(w, h); else drawGather(w, h);
+    if (snap.phase === "quan") drawQuan(w, h);
+    else if (snap.phase === "gather") drawGather(w, h);
     eventLog(w, h);
     overlay(w, h);
   } else {
