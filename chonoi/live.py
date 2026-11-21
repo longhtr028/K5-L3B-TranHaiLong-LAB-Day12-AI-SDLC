@@ -53,6 +53,9 @@ class LiveGame:
         self.events = list(self.session.initial_events)
         self.screen = "menu" if self.mode == "day" else None
         self.summary = None
+        self.sales = {}
+        self.shift = {"served": 0, "left": 0, "tips": 0, "income": 0, "reputation": 0}
+        self.start_reputation = self.session.sim.reputation
         self._saved = False
         self.error = None
 
@@ -76,8 +79,8 @@ class LiveGame:
                 except Exception:  # luật của nhóm lỗi: báo ra terminal + client, dừng bước (restart để chơi lại)
                     self.error = traceback.format_exc()
                     sys.stderr.write(self.error)
-                    self.session.sim.done = True
-                    self.session.sim.reason = "error"
+                    self.session.done = True
+                    self.session.reason = "error"
             delay = nxt - time.perf_counter()
             if delay > 0:
                 self._stop.wait(delay)
@@ -92,16 +95,25 @@ class LiveGame:
         previous = s.sim
         for row in s.step(self.inputs.advance()):
             self.events.append(row)
+            if row["name"] == "served":
+                dish = row["data"]["dish_id"]
+                self.sales[dish] = self.sales.get(dish, 0) + 1
+            elif row["name"] == "paid":
+                self.shift["served"] += 1
+                self.shift["tips"] += row["data"]["tip"]
+            elif row["name"] == "customer_left":
+                self.shift["left"] += 1
         if self.mode == "day":
             if s.done:
                 self.screen = "summary"
             elif old_phase != s.sim.phase:
                 self.screen = {"quan": "evening", "shop": "result", "gather": "intro"}[s.sim.phase]
                 if old_phase == "quan":
-                    paid = [e for e in self.events if e["name"] == "paid" and e.get("day") == s.day]
-                    left = [e for e in self.events if e["name"] == "customer_left" and e.get("day") == s.day]
-                    self.summary = {"served": len(paid), "left": len(left), "tips": sum(e["data"]["tip"] for e in paid),
-                                    "income": previous.shift_earned}
+                    self.summary = dict(self.shift, income=previous.shift_earned,
+                                        reputation=round(previous.reputation - self.start_reputation, 2))
+                elif old_phase == "gather":
+                    self.start_reputation = s.sim.reputation
+                    self.shift = {"served": 0, "left": 0, "tips": 0, "income": 0, "reputation": 0}
                 self.inputs = LiveInputs(BUTTONS)
         del self.events[:-RECENT_EVENTS]
         if s.done and not self._saved:
@@ -119,6 +131,12 @@ class LiveGame:
             snap["meta"] = self.tuning.get(snap["phase"], {})
             snap["screen"] = self.screen
             snap["summary"] = self.summary
+            snap["best_seller"] = max(self.sales, key=self.sales.get, default=None)
+            if self.session.sim.phase == "quan":
+                sim = self.session.sim
+                snap["shift_earned"] = sim.shift_earned
+                snap["cookable"] = [dish for dish, config in sim.menu.items()
+                                     if sim.stock.reserve(config["recipe"], sim._reservations()) is not None]
             if self.session.sim.phase == "shop":
                 snap["options"] = self.tuning["shop"]["upgrades"]
             snap["events"] = list(self.events)
@@ -221,8 +239,8 @@ class _Handler(BaseHTTPRequestHandler):
 class LiveServer:
     """Máy chủ + mô phỏng. port=0 -> cổng ngẫu nhiên (đọc `.port`)."""
 
-    def __init__(self, game: LiveGame, host="127.0.0.1", port=8000):
-        handler = type("Handler", (_Handler,), {"game": game})
+    def __init__(self, game: LiveGame, host="127.0.0.1", port=8000, handler_class=_Handler):
+        handler = type("Handler", (handler_class,), {"game": game})
         self.game = game
         self.httpd = ThreadingHTTPServer((host, port), handler)
         self.httpd.daemon_threads = True

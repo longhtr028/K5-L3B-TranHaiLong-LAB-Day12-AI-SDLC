@@ -34,7 +34,8 @@ class QuanSim:
         self.tables = self._merge(self.t["tables"], scenario.get("tables", []))
         self.customers = []
         fixtures = [dict(c, order_tick=c.get("order_tick", 0)) for c in scenario.get("customers", [])]
-        for source in sorted(fixtures, key=self._order_key):
+        fixtures.sort(key=self._order_key)
+        for source in sorted(fixtures, key=lambda fixture: "reserved" not in fixture):
             self._load_customer(source)
         self._validate_dishes()
         self.spawn_customers = scenario.get("random_customers", True)

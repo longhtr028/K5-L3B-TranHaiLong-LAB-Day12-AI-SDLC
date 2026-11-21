@@ -16,13 +16,15 @@ QUAN_KEYS = {"player", "stock", "hand", "stoves", "tables", "customers", "random
              "reputation", "time_left_ticks"}
 
 
-def _check_ids(name, arr):
+def _check_ids(name, arr, allowed):
     if not isinstance(arr, list):
         raise BadInput(f"{name} phải là mảng")
     seen = set()
     for e in arr:
         if not isinstance(e, dict) or not isinstance(e.get("id"), str) or not e["id"]:
             raise BadInput(f"{name}: mỗi phần tử cần id (chuỗi khác rỗng)")
+        if set(e) - allowed:
+            raise BadInput(f"{name}: trường lạ {sorted(set(e) - allowed)}")
         if e["id"] in seen:
             raise BadInput(f"{name}: id trùng {e['id']}")
         seen.add(e["id"])
@@ -112,9 +114,14 @@ def _pos(name, pos, bounds, axes=("x", "d")):
 def _validate_gather(b, tuning):
     g = tuning["gather"]
     bounds = g["bounds"]
-    for arr in ("nodes", "fish", "monsters"):
+    entities = {
+        "nodes": {"id", "kind", "pos", "regrow_ticks"},
+        "fish": {"id", "kind", "pos", "heading_deg", "age_ticks"},
+        "monsters": {"id", "kind", "pos", "waypoints", "target_idx", "state", "state_ticks_left", "recoil_dir"},
+    }
+    for arr, fields in entities.items():
         if arr in b:
-            _check_ids(arr, b[arr])
+            _check_ids(arr, b[arr], fields)
     if "random_fish" in b and not isinstance(b["random_fish"], bool):
         raise BadInput("random_fish phải là boolean")
     if "hold" in b:
@@ -169,8 +176,6 @@ def _validate_gather(b, tuning):
             _nonneg_int("age_ticks", f["age_ticks"])
     species = g.get("monsters", {}).get("species", {})
     for monster in b.get("monsters", []):
-        if set(monster) - {"id", "kind", "pos", "waypoints", "target_idx", "state", "state_ticks_left", "recoil_dir"}:
-            raise BadInput("trường thủy quái không hợp lệ")
         kind = monster.get("kind")
         if not isinstance(kind, str) or kind not in species:
             raise BadInput("loài thủy quái không hợp lệ")
@@ -218,9 +223,15 @@ def _validate_quan(b, tuning):
 
     if b.get("hand") is not None:
         dish_payload(b["hand"])
-    for arr in ("stoves", "tables", "customers"):
+    entities = {
+        "stoves": {"id", "pos", "state", "dish", "cook_ticks_left", "ready_ticks"},
+        "tables": {"id", "pos"},
+        "customers": {"id", "table_id", "dish_id", "order_tick", "state", "order_status",
+                      "patience_ticks_left", "eat_ticks_left", "reserved", "base_price", "tip"},
+    }
+    for arr, fields in entities.items():
         if arr in b:
-            _check_ids(arr, b[arr])
+            _check_ids(arr, b[arr], fields)
     if "stock" in b:
         load_items(b["stock"])
     p = b.get("player", {})

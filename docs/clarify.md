@@ -8,3 +8,4 @@
 | 4 | 2026-11-21 | Khi chuyển đơn sang nấu thì trừ kho lúc nào? | Giữ chỗ khi khách vào, trừ kho khi bắt đầu nấu. Khách rời trước khi nấu sẽ giải phóng chỗ. Chờ đối chiếu PRD chi tiết. | Quyết định tạm trong code |
 | 5 | 2026-11-21 | Có thể đối chiếu PRD và các ticket chưa? | Đã mở cả bốn tab bằng phiên Firefox đã đăng nhập, đối chiếu payload và thứ tự ở PRD-0 rồi chuyển sang Ticket-02. | Chợ Nổi Lab |
 | 6 | 2026-11-21 | Kho đếm cũ có tiếp tục đọc ở v1.2? | Ticket-03 yêu cầu từ chối; giữ bản chạy cũ qua tag `phase-2`. | Ticket-03 |
+| 7 | 2026-11-21 | Đo fps trong môi trường nào? | Chrome/Chromium dựng Canvas 1280×720 trong profile tạm, seed 42, làm nóng 3 giây. | Ticket-04 |

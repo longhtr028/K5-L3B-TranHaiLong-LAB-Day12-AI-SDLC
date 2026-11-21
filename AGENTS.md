@@ -4,8 +4,8 @@
 
 ## Lệnh
 - Test: `PYTHONPATH=tests:. python3 -m unittest discover -s tests -v`
-- Headless: `python3 -m chonoi.headless --mode gather|quan --seed 1 --ticks 600 --out out.jsonl`
-- Chơi thử trên trình duyệt: `python3 -m chonoi.live --mode gather|quan` (mở địa chỉ in ra; WASD, E, Space, R)
+- Headless: `python3 -m chonoi.headless --mode gather|quan|day --seed 1 --ticks 600 --out out.jsonl`
+- Chơi thử trên trình duyệt: `python3 -m chonoi.live --mode gather|quan|day` (mở địa chỉ in ra; WASD, E, Space, R)
 
 ## Cấu trúc & quy ước
 - (Starter Python là TÙY CHỌN; nhóm có thể dùng ngôn ngữ khác nếu giữ Test Contract.) Khung do giảng viên cấp: `chonoi/{headless,inputs,scenario,contract,rng,ids,jsonl,inventory,runner,live}.py` và `chonoi/web/`. Hạn chế sửa; nếu phải sửa thì báo cả nhóm và ghi lại lý do.
@@ -27,4 +27,7 @@
 
 ## Lệnh kiểm chứng của nhóm
 - `sh tools/verify_phase1.sh` chạy smoke test và kiểm thử gameplay trước khi gắn tag.
-- `sh tools/demo_phase1.sh` replay Gather → file kho → Quán trên bản đồ mặc định và in các sự kiện bắt buộc của demo.
+- `sh tools/demo_phase1.sh` chạy Gather → file kho → Quán với fixture cá đứng yên.
+- `python3 -m chonoi.soak --seed 7 --days 10 --out soak.json` kiểm tra 10 Ngày trong một phiên.
+- `python3 -m chonoi.bench --seed 42 --duration 30 --out bench.json` đo Canvas thật.
+- Ticket-03 đổi kho thành cá thể. Đọc ADR 0001 trước khi sửa kho, giữ chỗ, giá hoặc fixture.

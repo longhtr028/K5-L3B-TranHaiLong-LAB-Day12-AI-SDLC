@@ -65,7 +65,6 @@ class Stock:
         affected.sort(key=lambda c: (c["order_tick"], id_key(c["table_id"])))
         for customer in affected:
             customer["reserved"] = []
-        for customer in affected:
             recipe = menu[customer["dish_id"]]["recipe"]
             items = self.reserve(recipe, (c["reserved"] for c in customers))
             if items is None:

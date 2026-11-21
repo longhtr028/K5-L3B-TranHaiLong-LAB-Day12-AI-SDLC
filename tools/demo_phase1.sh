@@ -1,5 +1,5 @@
 #!/bin/sh
-# Chạy lại bảng điều khiển có sẵn trên bản đồ mặc định, rồi in bằng chứng.
+# Chạy lại bảng điều khiển có sẵn trên bản đồ mặc định với fixture cá đứng yên, rồi in bằng chứng.
 set -eu
 if [ "$#" -gt 1 ]; then
     printf '%s\n' 'Cách dùng: sh tools/demo_phase1.sh [thư mục kết quả]' >&2
@@ -13,7 +13,7 @@ else
 fi
 cd "$(dirname "$0")/.."
 python3 -m chonoi.headless --mode gather --seed 12 --ticks 1200 \
-    --inputs tools/demo/gather.inputs.json --snapshot-every 600 \
+    --inputs tools/demo/gather.inputs.json --scenario tools/demo/gather.scenario.json --snapshot-every 600 \
     --out "$demo_dir/gather.jsonl" --inventory-out "$demo_dir/inventory.json"
 python3 -m chonoi.headless --mode quan --seed 12 --ticks 12000 \
     --inputs tools/demo/quan.inputs.json --snapshot-every 600 \

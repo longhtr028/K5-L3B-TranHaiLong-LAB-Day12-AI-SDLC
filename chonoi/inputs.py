@@ -11,7 +11,7 @@ import math
 from .errors import BadInput
 
 BUTTONS_V10 = ("interact", "catch")
-BUTTONS = (*BUTTONS_V10, "pause", "shop_done")
+BUTTONS = (*BUTTONS_V10, "pause", "shop_done", "attack", "photo")
 
 
 class InputState:
