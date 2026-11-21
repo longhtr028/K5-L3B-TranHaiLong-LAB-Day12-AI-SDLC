@@ -65,3 +65,7 @@ class Workdir:
 
     def path(self, name):
         return os.path.join(self._d.name, name)
+
+
+def item_list(*kinds, fresh=100):
+    return [{"id": f"I{i}", "kind": kind, "fresh": fresh} for i, kind in enumerate(kinds, 1)]

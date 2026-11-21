@@ -1,44 +1,14 @@
 """Ca mở quán. Đơn giữ hàng cho đến khi bếp nhận, sau đó đi cùng payload món."""
 
 import math
-from collections import Counter
+from fractions import Fraction
 
 from ..errors import BadInput
 from ..ids import id_key, sort_by_id
-from ..inventory import validate_items
 from .ramp import ramp_velocity
 
 
-class CountStock:
-    def __init__(self, stock):
-        self.stock = dict(stock)
-
-    def snapshot(self):
-        return {k: v for k, v in sorted(self.stock.items()) if v > 0}
-
-    def empty(self):
-        return {}
-
-    def reserve(self, recipe, reservations):
-        available = Counter(self.stock)
-        for reservation in reservations:
-            available.subtract(reservation)
-        return dict(recipe) if all(available[k] >= n for k, n in recipe.items()) else None
-
-    def validate(self, reservation, recipe, others):
-        if validate_items(reservation, self.stock.keys() | recipe.keys()) != recipe:
-            raise BadInput("đơn giữ chỗ phải khớp công thức")
-        if self.reserve(recipe, others) is None:
-            raise BadInput("nguyên liệu giữ chỗ vượt kho")
-        return dict(reservation)
-
-    def cook(self, reserved, price):
-        for kind, quantity in reserved.items():
-            self.stock[kind] -= quantity
-        return [kind for kind in sorted(reserved) for _ in range(reserved[kind])], price
-
-    def age(self, customers, menu, events):
-        pass
+from .stock import Stock
 
 
 class QuanSim:
@@ -54,7 +24,7 @@ class QuanSim:
         self.vel = list(player.get("vel", [0.0, 0.0]))
         self._tgt = None
         self._ramp_left = 0
-        self.stock = self._stock(tuning, inventory if inventory is not None else scenario.get("stock", {}))
+        self.stock = Stock(inventory if inventory is not None else scenario.get("stock", []), tuning, ids)
         self.hand = scenario.get("hand")
         self.time_left_ticks = scenario.get("time_left_ticks", self._ticks(self.t["duration_s"]))
         self.reputation = scenario.get("reputation", self.t["reputation_initial"])
@@ -73,10 +43,6 @@ class QuanSim:
         self.money = self.earned = self.shift_earned = 0
         self.done = False
         self.reason = None
-
-    @staticmethod
-    def _stock(tuning, items):
-        return CountStock(items)
 
     @staticmethod
     def _merge(defaults, updates):
@@ -276,7 +242,7 @@ class QuanSim:
         price = self.hand["base_price"]
         patience = customer["patience_ticks_left"]
         threshold = self._ticks(self.t["patience_s"]) * self.t["tip_min_patience_ratio"]
-        tip = math.floor(price * self.t["tip_rate"]) if patience >= threshold else 0
+        tip = math.floor(price * Fraction(str(self.t["tip_rate"]))) if patience >= threshold else 0
         events.append(("served", dict(self.hand, table_id=table["id"], patience_ticks_left=patience, tip=tip)))
         customer.update(state="eating", order_status="served", base_price=price, tip=tip,
                         eat_ticks_left=self._ticks(self.t["eat_s"]))

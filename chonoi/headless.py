@@ -57,7 +57,7 @@ def main(argv=None) -> int:
             raise BadInput("--inventory-out chỉ dùng với gather")
         outs = [x for x in (a.out, a.inventory_out) if x]
         ins = [x for x in (a.scenario, a.inputs, a.inventory) if x]
-        paths = [os.path.abspath(x) for x in outs + ins]
+        paths = [os.path.realpath(x) for x in outs + ins]
         if len(set(paths)) != len(paths):
             raise BadInput("các đường dẫn đầu vào/đầu ra phải khác nhau")
         contract = load_contract()

@@ -1,9 +1,10 @@
 """Mô phỏng lặn bắt cá và hái rau theo từng tick."""
 
 import math
+from fractions import Fraction
 
 from ..ids import id_key, sort_by_id
-from ..inventory import hold_to_items
+from ..inventory import age_items, item_rows, load_items
 from .ramp import ramp_velocity
 from .wildlife import Wildlife
 
@@ -32,7 +33,11 @@ class GatherSim:
         self.zero_oxy_ticks = p.get("zero_oxy_ticks", 0)
         self.invuln_ticks = p.get("invuln_ticks", 0)
         self.catch_cd_ticks = p.get("catch_cd_ticks", 0)
-        self.hold = list(scenario.get("hold", []))  # thứ tự nhặt, cuối mảng là mới nhất
+        self.hold = load_items(scenario.get("hold", []))
+        for item in self.hold:
+            ids.reserve(item["id"])
+        self.freshness = tuning["freshness"]
+        self.decay = Fraction(str(self.freshness["gather_decay_per_s"])) / self.hz
         self.time_left_ticks = scenario.get("time_left_ticks", int(round(t["duration_s"] * self.hz)))
         # nút và đàn cá: scenario THAY THẾ danh sách mặc định; random_fish=false tắt cá mặc định
         src_nodes = scenario["nodes"] if "nodes" in scenario else t["nodes"]
@@ -50,8 +55,8 @@ class GatherSim:
         self.reason = None
 
     # --- giao diện cho runner -------------------------------------------------
-    def inventory_items(self) -> dict:
-        return hold_to_items(self.hold)
+    def inventory_items(self):
+        return sort_by_id(self.hold)
 
     def snapshot(self) -> dict:
         return {
@@ -60,7 +65,7 @@ class GatherSim:
                        "hp": self.hp, "hp_max": self.t["hp_max"], "zero_oxy_ticks": self.zero_oxy_ticks,
                        "invuln_ticks": self.invuln_ticks, "catch_cd_ticks": self.catch_cd_ticks,
                        "at_surface": self._at_surface()},
-            "hold": self.hold, "hold_count": len(self.hold),
+            "hold": item_rows(self.hold), "hold_count": len(self.hold),
             "hold_capacity": self.t["hold_capacity"],
             "nodes": [{"id": n["id"], "pos": n["pos"], "kind": n["kind"],
                        "ready": n["regrow_ticks"] == 0, "regrow_ticks": n["regrow_ticks"]}
@@ -82,6 +87,7 @@ class GatherSim:
                 n["regrow_ticks"] -= 1
                 if n["regrow_ticks"] == 0:
                     events.append(("node_regrown", {"node_id": n["id"]}))
+        age_items(self.hold, self.decay, self.freshness["spoiled_below"], "hold", events)
         at_surface_before_move = self._at_surface()
         self._move(inp)
         at_surface = self._at_surface()
@@ -132,7 +138,7 @@ class GatherSim:
             self._faint("choke", events)
 
     def _faint(self, cause, events):
-        lost = list(reversed(self.hold))
+        lost = item_rows(reversed(self.hold))
         self.hold.clear()
         events.append(("faint", {"cause": cause, "lost": lost, "hp": 0}))
         self._finish("fainted", events)
@@ -147,7 +153,8 @@ class GatherSim:
             events.append(("hold_full", dict(target, action=action, required=quantity,
                                              free=self.t["hold_capacity"] - len(self.hold))))
             return False
-        self.hold.extend([kind] * quantity)
+        self.hold.extend({"id": self.ids.new("I"), "kind": kind, "fresh": Fraction(self.freshness["initial"])}
+                         for _ in range(quantity))
         return True
 
     def _harvest(self, events):
@@ -182,7 +189,7 @@ class GatherSim:
     def _finish(self, reason, events):
         self.done = True
         self.reason = reason
-        events.append(("gather_end", {"reason": reason, "inventory": {"items": self.inventory_items()}}))
+        events.append(("gather_end", {"reason": reason, "inventory": {"items": item_rows(self.inventory_items())}}))
 
     def _move(self, inp):
         speed = self.t["swim_speed"]

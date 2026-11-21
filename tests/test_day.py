@@ -1,5 +1,7 @@
 import unittest
 
+from helpers import item_list
+
 from chonoi.contract import load_contract
 from chonoi.inputs import BUTTONS, InputPlayer
 from chonoi.runner import Session
@@ -34,10 +36,10 @@ class DayContract(unittest.TestCase):
 
     def test_monster_contact_discards_last_items(self):
         scenario = {"player": {"pos": [60, 24]}, "random_fish": False,
-                    "hold": ["ca_loc", "ca_linh", "bong_sung", "keo_neo"]}
+                    "hold": item_list("ca_loc", "ca_linh", "bong_sung", "keo_neo")}
         session = Session("gather", TUNING, scenario, 1)
         hit = session.step(InputPlayer([]).advance(0))[0]
         self.assertEqual(hit["name"], "monster_hit")
-        self.assertEqual(hit["data"]["lost"], ["keo_neo", "bong_sung"])
+        self.assertEqual([item["kind"] for item in hit["data"]["lost"]], ["keo_neo", "bong_sung"])
         self.assertEqual(session.snapshot()["player"]["invuln_ticks"], 90)
         self.assertEqual(session.snapshot()["monsters"][0]["state"], "recoil")

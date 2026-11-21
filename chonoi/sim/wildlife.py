@@ -3,6 +3,7 @@
 import math
 
 from ..ids import sort_by_id
+from ..inventory import item_rows
 
 
 def direction(angle):
@@ -136,6 +137,6 @@ class Wildlife:
         recoil = [c / distance for c in delta] if distance else [1, 0]
         monster.update(state="recoil", recoil_dir=recoil, state_ticks_left=self.species[monster["kind"]]["recoil_ticks"])
         events.append(("monster_hit", {"monster_id": monster["id"], "hp": player.hp,
-                                       "lost": lost, "pos": list(player.pos)}))
+                                       "lost": item_rows(lost), "pos": list(player.pos)}))
         if player.hp == 0:
             player._faint("monster", events)

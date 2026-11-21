@@ -230,6 +230,7 @@ function eventMessage(event) {
   switch (event.name) {
     case "gather":
     case "fish_caught": return `+ ${(d.amount ?? d.yield)} ${KIND_NAME[d.kind]}`;
+    case "spoiled": return `${KIND_NAME[d.kind]} đã ươn`;
     case "hold_full": return "Giỏ đã đầy";
     case "oxygen_empty": return "Hết oxy. Bơi lên mặt nước!";
     case "choke": return `Thiếu oxy · còn ${d.hp} máu`;
@@ -352,10 +353,15 @@ function drawGather(w, h) {
     for (let i = 0; i < cap; i++) {
       const x0 = 14 + i * (sz + 4);
       ctx.fillStyle = "rgba(255,255,255,.12)"; ctx.fillRect(x0, y0, sz, sz);
-      if (snap.hold[i]) { ctx.fillStyle = kc(snap.hold[i]); ctx.fillRect(x0 + 3, y0 + 3, sz - 6, sz - 6); }
+      const item = snap.hold[i];
+      if (item) {
+        ctx.fillStyle = item.fresh < 30 ? "#765e64" : kc(item.kind ?? item);
+        ctx.fillRect(x0 + 3, y0 + 3, sz - 6, sz - 6);
+        if (item.fresh < 30) text("×", x0 + sz / 2, y0 + sz - 5, {align: "center"});
+      }
     }
-    const names = {}; snap.hold.forEach((k) => (names[k] = (names[k] || 0) + 1));
-    text("Giỏ " + snap.hold.length + "/" + cap + "  " + Object.keys(names).map((k) => (KIND_NAME[k] || k) + "×" + names[k]).join(", "), 14, y0 + sz + 16, { size: 12, color: "#cfd8dc" });
+    const spoiled = snap.hold.filter((item) => item.fresh < 30).length;
+    text(`Giỏ ${snap.hold.length}/${cap} · ${quantities(snap.hold)}${spoiled ? ` · ${spoiled} ươn` : ""}`, 14, y0 + sz + 16, { size: 12, color: "#cfd8dc" });
   }
   text("WASD/mũi tên bơi · E hái / cập bến · Space bắt cá · R chơi lại", w - 10, h - 14, { size: 12, align: "right", color: "#9fb3c0" });
 }
@@ -412,8 +418,11 @@ function drawQuan(w, h) {
   // HUD
   text("⏱ " + fmtTime(snap.time_left_ticks), 14, 28, { size: 20 });
   text(`Tiền ${snap.money ?? 0}k · uy tín ${(snap.reputation ?? 0).toFixed(1)} · điểm ${snap.score ?? 0}`, 110, 28, { size: 16 });
-  const stock = quantities(snap.stock);
-  text("Kho: " + (stock || "(trống)"), 14, 52, { size: 13, color: "#cfd8dc" });
+  const held = new Set((snap.customers || []).flatMap((c) => c.reserved));
+  const stock = Array.isArray(snap.stock)
+    ? quantities(snap.stock.filter((item) => item.fresh >= 30 && !held.has(item.id))) : quantities(snap.stock);
+  const spoiled = Array.isArray(snap.stock) ? snap.stock.filter((item) => item.fresh < 30).length : 0;
+  text("Kho: " + stock + (spoiled ? ` · ${spoiled} ươn` : ""), 14, 52, { size: 13, color: "#cfd8dc" });
   text("WASD/mũi tên đi · E tương tác (bếp / bàn) · R chơi lại", w - 10, h - 14, { size: 12, align: "right", color: "#9fb3c0" });
 }
 

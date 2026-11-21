@@ -1,6 +1,8 @@
 """Phiên mô phỏng dùng chung cho CLI, cửa sổ chơi và soak."""
 
 import math
+import os
+import tempfile
 from collections import Counter
 
 from .errors import BadInput
@@ -68,7 +70,10 @@ class Session:
                 stats = self.tuning["shop"]["upgrades"][key][level - 1]
                 gather.update({name: value for name, value in stats.items() if name not in ("level", "price")})
         tuning = dict(self.tuning, gather=gather)
-        self.sim = GatherSim(tuning, self.scenario.get("gather", {}), self.streams, self.ids, self.day)
+        scenario = self.scenario.get("gather", {})
+        if self.day > 1 and "hold" in scenario:
+            scenario = dict(scenario, hold=[dict(item, id=self.ids.new("I")) for item in scenario["hold"]])
+        self.sim = GatherSim(tuning, scenario, self.streams, self.ids, self.day)
         self.sim.money, self.sim.earned, self.sim.reputation = money, earned, reputation
 
     def _start_events(self):
@@ -155,7 +160,10 @@ def run(mode, tuning, scenario, seed, frames, ticks, out_path, snapshot_every, i
         inventory_out=None, days=1):
     sess = Session(mode, tuning, scenario, seed, inventory, days)
     player = InputPlayer(frames, BUTTONS)
-    writer = JsonlWriter(out_path)
+    directory = os.path.dirname(os.path.abspath(out_path))
+    fd, temporary = tempfile.mkstemp(prefix=".chonoi-", dir=directory)
+    os.close(fd)
+    writer = JsonlWriter(temporary)
     try:
         for event in sess.initial_events:
             writer.write(event)
@@ -171,12 +179,11 @@ def run(mode, tuning, scenario, seed, frames, ticks, out_path, snapshot_every, i
         if last_snapped != sess.tick:
             writer.write(sess.snapshot())
         writer.write(sess.end_row())
-    except BadInput:
         writer.close()
-        import os
-        os.unlink(out_path)
-        raise
+        os.replace(temporary, out_path)
     finally:
         writer.close()
+        if os.path.exists(temporary):
+            os.unlink(temporary)
     sess.write_inventory_if_done(inventory_out)
     return sess.sim

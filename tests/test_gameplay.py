@@ -4,7 +4,7 @@ import json
 import os
 import unittest
 
-from helpers import Workdir, events, frames, read_jsonl, run_headless, snapshots, write_json
+from helpers import item_list, Workdir, events, frames, read_jsonl, run_headless, snapshots, write_json
 from chonoi.contract import load_contract
 
 TUNING = load_contract()["tuning"]
@@ -26,12 +26,12 @@ class Gameplay(unittest.TestCase):
             rows = self.headless(work, "gather", 2, {
                 "player": {"pos": [2, 1], "hp": 1, "oxygen_ticks": 0,
                            "zero_oxy_ticks": TUNING["gather"]["choke_interval_ticks"] - 1},
-                "hold": ["ca_loc"], "time_left_ticks": 1,
+                "hold": item_list("ca_loc"), "time_left_ticks": 1,
             }, [{"tick": 0, "interact": True, "catch": True}], "--inventory-out", inventory)
             self.assertEqual([e["name"] for e in events(rows)], ["choke", "faint", "gather_end"])
             self.assertEqual(rows[-1]["reason"], "fainted")
             with open(inventory, encoding="utf-8") as file:
-                self.assertEqual(json.load(file), {"items": {}})
+                self.assertEqual(json.load(file), {"items": []})
 
     def test_surface_transition_refills_and_harvest_regrows(self):
         g = TUNING["gather"]
@@ -43,13 +43,13 @@ class Gameplay(unittest.TestCase):
             }, [{"tick": 0, "move": [0, -1], "interact": True}])
             self.assertEqual([e["name"] for e in events(rows)], ["surface", "gather", "node_regrown"])
             self.assertEqual(events(rows, "gather")[0]["data"]["node_id"], "N2")
-            self.assertEqual(snapshots(rows)[-1]["hold"], ["bong_dien_dien"] * g["node_yield"])
+            self.assertEqual([item["kind"] for item in snapshots(rows)[-1]["hold"]], ["bong_dien_dien"] * g["node_yield"])
 
     def test_full_basket_leaves_fish_and_does_not_start_cooldown(self):
         g = TUNING["gather"]
         with Workdir() as work:
             rows = self.headless(work, "gather", 1, {
-                "player": {"pos": [15, 5]}, "hold": ["ca_loc"] * (g["hold_capacity"] - 1),
+                "player": {"pos": [15, 5]}, "hold": item_list(*(["ca_loc"] * (g["hold_capacity"] - 1))),
                 "fish": [{"id": "F1", "kind": "ca_linh", "pos": [15, 5]}],
             }, [{"tick": 0, "catch": True}])
             self.assertEqual([e["name"] for e in events(rows)], ["hold_full"])
@@ -84,25 +84,27 @@ class Gameplay(unittest.TestCase):
                 {"tick": serve, "interact": True, "move": [0, 0]}], "--inventory", inventory)
             self.assertEqual([e["name"] for e in events(evening) if e["name"] != "no_dish"],
                              ["customer_arrived", "cook_started", "dish_ready", "dish_picked", "served", "paid"])
-            self.assertEqual(evening[-1]["money"], dish["price"] + round(dish["price"] * q["tip_rate"]))
-            self.assertEqual(snapshots(evening)[-1]["stock"], {})
+            base = events(evening, "cook_started")[0]["data"]["base_price"]
+            self.assertEqual(base, dish["price"] - 1)
+            self.assertEqual(evening[-1]["money"], base + int(base * q["tip_rate"]))
+            self.assertEqual(snapshots(evening)[-1]["stock"], [])
 
     def test_customer_timeout_releases_reserved_items(self):
         with Workdir() as work:
             shifted = self.headless(work, "quan", 121, {
-                "stock": {"ca_loc": 1},
+                "stock": item_list("ca_loc"),
                 "customers": [{"id": "C9", "table_id": "T1", "dish_id": "ca_loc_nuong_trui",
                                "patience_ticks_left": 1}],
             }, [])
             self.assertEqual([e["name"] for e in events(shifted)], ["customer_left", "customer_arrived"])
             self.assertEqual(snapshots(shifted)[-1]["customers"][0]["id"], "C10")
-            self.assertEqual(snapshots(shifted)[-1]["stock"], {"ca_loc": 1})
+            self.assertEqual(snapshots(shifted)[-1]["stock"], item_list("ca_loc", fresh=100 - 121 / 240))
 
     def test_overbooked_reservation_stops_before_output(self):
         with Workdir() as work:
             output = work.path("out.jsonl")
             scenario = write_json(work.path("scenario.json"), {"quan": {
-                "stock": {},
+                "stock": [],
                 "customers": [{"id": "C1", "table_id": "T1", "dish_id": "ca_loc_nuong_trui"}],
             }})
             code, _ = run_headless("--mode", "quan", "--seed", "1", "--ticks", "0",
