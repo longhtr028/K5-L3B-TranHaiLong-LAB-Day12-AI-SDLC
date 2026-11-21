@@ -1,8 +1,7 @@
-# Hợp đồng tích hợp (nên chốt sớm; hình thức do nhóm chọn)
+# Hợp đồng tích hợp Phase 1
 
-Điền trong 15 phút kickoff (hoặc thay bằng một mục trong README / một bảng trên giấy, miễn cả nhóm cùng thống nhất):
-1. **Schema file kho** — khớp mục G của PRD-0 (kho ghi khi `gather_end`) + một file kho mẫu hợp lệ: `inventory.sample.json`.
-2. **Giao diện giữa `sim/*` và `client/ui`** — trạng thái nào UI được đọc, lệnh nào UI gửi vào.
-3. **Danh sách sự kiện** — tên, `data`, ai phát, ai nghe (gather: `gather`, `node_regrown`, `hold_full`, `fish_caught`, `gather_end`...; quan: theo mục E của PRD-0).
-
-Khi đổi hợp đồng sau này: báo cả nhóm và ghi lại lý do (ADR hoặc ghi chú, tùy chọn).
+- Gather viết kho theo [mẫu JSON](inventory.sample.json) khi kết thúc buổi. `items` chứa số lượng theo mã nguyên liệu. Ngất làm rỗng giỏ. Dừng do giới hạn tick giữ nguyên tệp đích.
+- Quán đọc kho bằng `--inventory` hoặc `quan.stock` trong scenario. Đơn khách giữ nguyên liệu trước và trừ kho khi vào bếp.
+- Client gửi di chuyển và hai nút `interact`, `catch`. Một lần bấm tạo cạnh lên. Client đọc snapshot từ `GET /state`, chung mô phỏng với headless.
+- Gather phát các sự kiện `dive`, `surface`, `oxygen_empty`, `choke`, `faint`, `gather`, `node_regrown`, `fish_caught`, `hold_full` và `gather_end`. Các sự kiện tương tác chứa id của thực thể tương ứng.
+- Quán phát `customer_arrived`, `no_dish`, `customer_left`, `cook_started`, `dish_ready`, `dish_picked`, `served`, `paid` và `quan_end`. Xem [replay](../proof/phase-1/replay.md) để đối chiếu thứ tự một ca mẫu.

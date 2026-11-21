@@ -13,6 +13,26 @@ Cách làm việc kỹ thuật là **tự do** (push thẳng, nhánh + PR, pair,
 4. **Gắn tag** `phase-1` … `phase-4` đúng hạn; chạy được tại từng tag.
 5. **Ghi chép tối thiểu:** `docs/verification/phase-n.md`, `docs/clarify.md`, `docs/ai-usage-log.md`, `docs/retro.md`, `docs/members/<handle>.md`.
 
+## Bài làm một người
+
+Trần Hải Long · 2A202603891 · [@longhtr028](https://github.com/longhtr028)
+
+Bản hiện tại có vòng chơi Gather và Quán của Phase 1 theo starter, với kho nguyên liệu chuyển giữa hai buổi. Xem [kết quả kiểm thử](docs/verification/phase-1.md) và [các điểm cần đối chiếu với lab board](docs/clarify.md).
+
+```sh
+sh tools/verify_phase1.sh
+sh tools/demo_phase1.sh
+```
+
+Để chơi buổi sáng và tiếp tục ở quán, chạy buổi sáng, kết thúc bằng cách bấm E tại bến, sau đó dừng máy chủ bằng Ctrl+C và mở buổi tối:
+
+```sh
+python3 -m chonoi.live --mode gather --inventory-out kho.json
+python3 -m chonoi.live --mode quan --inventory kho.json
+```
+
+WASD hoặc mũi tên để di chuyển. Dùng Space để bắt cá dưới nước. Dùng E để hái rau, cập bến và tương tác với bếp hoặc bàn. Nhấn R để chơi lại buổi hiện tại.
+
 ## Bắt đầu nhanh
 
 ```bash

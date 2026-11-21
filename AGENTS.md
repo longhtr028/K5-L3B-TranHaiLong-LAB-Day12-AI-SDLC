@@ -25,5 +25,6 @@
 - Agent làm xong phải chạy test và ghi kết quả vào mô tả commit hoặc `docs/proof/`; người đọc lại thay đổi trước khi đẩy.
 - Sáng tạo thêm được khuyến khích nhưng phải tắt ở headless (xem README, mục "Tự do sáng tạo").
 
-## Skills / hooks của nhóm
-- (Ghi tên và khi nào dùng; tối thiểu 2 skill/hook/command nhóm tự viết, đặt ở `.agents/skills/` hoặc tương đương.)
+## Lệnh kiểm chứng của nhóm
+- `sh tools/verify_phase1.sh` chạy smoke test và kiểm thử gameplay trước khi gắn tag.
+- `sh tools/demo_phase1.sh` replay Gather → file kho → Quán trên bản đồ mặc định và in các sự kiện bắt buộc của demo.

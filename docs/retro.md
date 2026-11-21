@@ -1,13 +1,12 @@
-# Retro nhóm
+# Retro
 
-## Phase 2 (nhanh)
-- Điều tốt:
-- Điều tệ:
-- 1 hành động cho Phase 3:
+## Phase 1
 
-## Phase 4 (cuối)
-- Rà lại hành động Phase 2: đã làm chưa? vì sao?
-- Điều tốt / điều tệ:
-- Số liệu: số commit theo người, cách đọc code của nhau, token theo người:
-- Một lần AI sai và cách nhóm phát hiện:
-- Nếu làm lại, đổi gì:
+- Replay trên bản đồ mặc định phát hiện lỗi tích hợp giữa điều khiển, xuất kho và nấu ăn nếu một trong hai mode đổi nhịp tick.
+- Starter có 32 test xanh trước khi triển khai. Sau khi bổ sung luật, sáu test mới bao quát các hành vi chưa có trong bộ smoke.
+- Trong lúc triển khai, kiểm tra `zero_oxy_ticks` ban đầu giới hạn cố định ở 59 từ starter. Đã chuyển điều kiện sang `choke_interval_ticks` của preset để fixture vẫn hợp lệ khi thay đổi chu kỳ.
+- Việc cần làm ở phase sau là lấy Test Contract chi tiết và giữ replay Phase 1 làm kiểm tra hồi quy.
+
+## Phase 2 và Phase 4
+
+Chưa tiến hành retro cho các phase này.
